@@ -1,30 +1,35 @@
 pipeline {
     agent {
         docker {
-            image 'maven:3.9.0-openjdk-17'
+            image 'maven:3.9.9-eclipse-temurin-17'
             args '-v /root/.m2:/root/.m2'
         }
     }
 
     environment {
-        TOMCAT_LABEL = "app=tomcat-app"
+        GIT_REPO     = 'https://github.com/krishna85103/krishna-app.git'
+        GIT_BRANCH  = 'main'
+        TOMCAT_LABEL = 'app=tomcat-app'
+        WAR_NAME    = 'krishna-app.war'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: '<YOUR_GIT_REPO_URL>'
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
             }
         }
 
         stage('Build WAR') {
             steps {
+                echo "Building WAR using Maven Docker agent..."
                 sh 'mvn clean package'
+                sh 'ls -l target'
             }
         }
 
-        stage('Deploy to Tomcat') {
+        stage('Deploy to Tomcat (Kubernetes)') {
             steps {
                 script {
                     def tomcatPod = sh(
@@ -32,9 +37,13 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    sh "kubectl cp target/krishna-app.war ${tomcatPod}:/usr/local/tomcat/webapps/krishna-app.war"
-                    sh "kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/shutdown.sh || true"
-                    sh "kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/startup.sh"
+                    echo "Tomcat Pod detected: ${tomcatPod}"
+
+                    sh """
+                        kubectl cp target/${WAR_NAME} ${tomcatPod}:/usr/local/tomcat/webapps/${WAR_NAME}
+                        kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/shutdown.sh || true
+                        kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/startup.sh
+                    """
                 }
             }
         }
@@ -42,10 +51,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Krishna app deployed successfully!"
+            echo "✅ Krishna app deployed successfully to Tomcat!"
         }
         failure {
-            echo "❌ Deployment failed."
+            echo "❌ Build or deployment failed. Check logs."
         }
     }
 }
