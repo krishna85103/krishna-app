@@ -1,9 +1,8 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.9-eclipse-temurin-17'
-            args '-v /root/.m2:/root/.m2'
-        }
+    agent any
+
+    tools {
+        maven 'maven3'
     }
 
     environment {
@@ -21,11 +20,13 @@ pipeline {
             }
         }
 
-        stage('Build WAR') {
+        stage('Build WAR with Maven') {
             steps {
-                echo "Building WAR using Maven Docker agent..."
-                sh 'mvn clean package'
-                sh 'ls -l target'
+                echo "Building WAR using Jenkins-managed Maven..."
+                sh '''
+                  mvn -version
+                  mvn clean package
+                '''
             }
         }
 
@@ -37,12 +38,12 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    echo "Tomcat Pod detected: ${tomcatPod}"
+                    echo "Tomcat Pod: ${tomcatPod}"
 
                     sh """
-                        kubectl cp target/${WAR_NAME} ${tomcatPod}:/usr/local/tomcat/webapps/${WAR_NAME}
-                        kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/shutdown.sh || true
-                        kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/startup.sh
+                      kubectl cp target/${WAR_NAME} ${tomcatPod}:/usr/local/tomcat/webapps/${WAR_NAME}
+                      kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/shutdown.sh || true
+                      kubectl exec ${tomcatPod} -- /usr/local/tomcat/bin/startup.sh
                     """
                 }
             }
@@ -51,10 +52,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Krishna app deployed successfully to Tomcat!"
+            echo "✅ Krishna app built & deployed successfully!"
         }
         failure {
-            echo "❌ Build or deployment failed. Check logs."
+            echo "❌ Pipeline failed"
         }
     }
 }
